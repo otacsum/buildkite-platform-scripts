@@ -17,11 +17,22 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(
 from detect_skip import detect_skip  # noqa: E402
 
 PLATFORM_REPO_URL = "https://github.com/otacsum/buildkite-platform-scripts.git"
-PLATFORM_REPO_REF = "v1.0.0"
+PLATFORM_REPO_REF = "v1.0.1"
 
+# Cloned to a fresh, unique directory per job (not a fixed path like
+# /tmp/platform-scripts) because multiple jobs can share one agent host's
+# filesystem - a fixed path would let one job's clone collide with, or fall
+# back to, another job's stale/partial checkout. "$$CLONE_DIR" (not
+# "$CLONE_DIR") is deliberate: this string is embedded into pipeline YAML
+# that Buildkite uploads and then interpolates once as a real step, and the
+# double dollar sign is what survives that pass as a real "$CLONE_DIR" for
+# bash to resolve - this file's own source is a plain, non-interpolated
+# file, so writing it directly here (no chr(36) tricks needed) is safe.
 CLONE_CMD = (
-    f"git clone --branch {PLATFORM_REPO_REF} --depth 1 {PLATFORM_REPO_URL} /tmp/platform-scripts"
+    "CLONE_DIR=$(mktemp -d)\n"
+    f"git clone --branch {PLATFORM_REPO_REF} --depth 1 {PLATFORM_REPO_URL} \"$$CLONE_DIR\""
 )
+
 
 ANALYSIS_STEPS = ["clang-format", "cppcheck", "buildifier"]
 SOFT_FAIL_ANALYSIS = {"clang-format", "cppcheck"}
@@ -32,7 +43,7 @@ def truncate(reason, limit=70):
 
 
 def script_command(script_name):
-    return f"{CLONE_CMD}\nbash /tmp/platform-scripts/scripts/{script_name}"
+    return f'{CLONE_CMD}\nbash "$$CLONE_DIR/scripts/{script_name}"'
 
 
 def build_steps(skip, reason):
